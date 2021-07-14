@@ -14,7 +14,7 @@ do
 		for k in $(seq 0.01 0.01 2.0)
 		do
 			echo $i $j $k
-			./sheep.exe 5 10 $i $j $k >> result.txt
+			./src/sheep.exe 5 10 $i $j $k >> ./results/result.txt
 		done
 	done
 done 
