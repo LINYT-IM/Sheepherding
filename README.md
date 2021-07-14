@@ -3,8 +3,9 @@
 專題--牧羊問題路徑規劃
 
 # 使用方法
+先修改 run_all.sh檔裡的數值範圍
 
-在 Shell Script 中執行:
+並在 Shell Script 中執行:
 
 ```console
 :~$ sh run_all.sh
