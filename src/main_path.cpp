@@ -6,9 +6,10 @@
 #include <random> 
 #include <climits>
 #include <algorithm>
-#include <complex>
+#include "line.h"
+
 using namespace std;
-typedef complex<float> Point;
+
 
 /*
 環境設定:250x250
@@ -27,11 +28,7 @@ float distanceObj(pair<float, float> obj1, pair<float, float> obj2){
     
 }
 
-Point rotate(Point org, Point center, float angle){
-    Point r(cos(angle/180*M_PI), sin(angle/180*M_PI));
-    Point rusult = (org - center)*r + center;
-    return rusult;
-}
+
 
 struct Player {
     Player(){};
@@ -40,7 +37,10 @@ struct Player {
     }
     pair <float, float> pos;
     pair <float, float> currV;
+    Line path;
 };
+
+
 
 class Sheep{
 public:
@@ -60,13 +60,17 @@ public:
         this->status = stat;
     };
     void randMove(int limit, pair <float, float> v0);
-    void calV0(Player* player);
+    void calV0(Player* player, int type);
     void runMode(int limit);
     void playerReset(){
         this->player_index.clear();
+        this->player_index_p.clear();
     }
     void addPlayer(int ind){
         this->player_index.push_back(ind);
+    }
+    void addPlayerP(int ind){
+        this->player_index_p.push_back(ind);
     }
 private:
     int status;
@@ -75,6 +79,8 @@ private:
     pair<float, float> currV;
     // 被哪幾台無人機影響
     vector <int> player_index;
+    // path
+    vector <int> player_index_p;
 };
 
 void generateRandSheep(Sheep *sheeps, int n, int limit, pair <float, float> *list, int randTyp){
@@ -82,13 +88,14 @@ void generateRandSheep(Sheep *sheeps, int n, int limit, pair <float, float> *lis
     random_device rd;
     default_random_engine generator( rd() );
     int hori, verti;
+    int cirR = rand()%(int(limit / 4)) + 1; //生成虛擬範圍
+    // cout << cirR << endl;
     if(randTyp == 0){
         // 聚集
-        int cirR = rand()%(int(limit / 4)) + 1; //生成虛擬範圍
         pair<float, float> center(rand()%(limit-2*cirR) + cirR, rand()%(limit-2*cirR) + cirR); //虛擬範圍中心
         // cout << center.first << " " << center.second  << endl;
         for(int i = 0; i < n; i++){
-            srand(i);
+            // srand(i);
             uniform_real_distribution<float> unif(0, 2*cirR);
             hori = unif(generator) + center.first - cirR;
             verti = unif(generator) + center.second - cirR;
@@ -99,12 +106,31 @@ void generateRandSheep(Sheep *sheeps, int n, int limit, pair <float, float> *lis
         }
     }else if(randTyp == 1){
         // 分散
-        int group = floor(n / 4); //決定幾個圈圈
+        int group = floor(n / 4) + 1; //決定幾個圈圈
+        // cout << group << endl;
+        int x,y;
+        uniform_real_distribution<float> unif(cirR, limit-cirR);
+        pair <float, float> centers[group];
+        for(int i = 0; i < group; i++){
+            // center each circle;
+            x = unif(generator);
+            y = unif(generator);
+            centers[i] = pair <float, float>(x, y);
+        }
+        int cir = 0; //第幾個圈圈
+        int count = 0;
+        uniform_real_distribution<float> unif2(-cirR, cirR);
         for(int i = 0; i < n; i++){
-            hori = rand()%limit;
-            verti = rand()%limit;
+            // cout << centers[i].first << " " << centers[i].second << endl;
+            hori = unif2(generator) + centers[cir].first; 
+            verti = unif2(generator) + centers[cir].second;
             sheeps[i].setData(hori, verti, 0);
             list[i] = pair<float, float>(hori, verti);
+            count += 1;
+            if(count >= 4){
+                count = 0;
+                cir+=1;
+            }
         }
     }else{
         // random
@@ -161,16 +187,32 @@ void Sheep::randMove(int limit, pair <float, float> v0 = pair <float, float>(0, 
     
 }
 
-void Sheep::calV0(Player *player){
+void Sheep::calV0(Player *player, int type = 0){
     // 所有無人機合力
     pair <float, float> t_force(0, 0);
-    for(int i = 0; i < this->player_index.size(); i++){
-        // cout << this->player_index.size();
-        t_force.first += this->x - player[this->player_index[i]].pos.first;
-        t_force.second += this-> y - player[this->player_index[i]].pos.second;
+    if(type == 0){
+        // case 1
+        for(int i = 0; i < this->player_index.size(); i++){
+            // cout << this->player_index.size();
+            t_force.first += this->x - player[this->player_index[i]].pos.first;
+            t_force.second += this-> y - player[this->player_index[i]].pos.second;
+        }
+        t_force.first /= this->player_index.size();
+        t_force.second /= this->player_index.size();
+    }else{
+        for(int i = 0; i < this->player_index_p.size(); i++){
+            // cout << this->player_index.size();
+            Point vec = projectP(Point(this->x, this->y), player[this->player_index_p[i]].path);
+            t_force.first += this->x -  vec.real();
+            t_force.second += this-> y - vec.imag();
+            // t_force.first += this->x -  player[this->player_index[i]].pos.first;
+            // t_force.second += this-> y - player[this->player_index[i]].pos.second;
+        }
+        t_force.first /= this->player_index_p.size();
+        t_force.second /= this->player_index_p.size();
+
     }
-    t_force.first /= this->player_index.size();
-    t_force.second /= this->player_index.size();
+
     pair <float, float> dir(t_force.first, t_force.second); 
     if(dir.first == 0 && dir.second == 0){
         // 在正中間
@@ -230,9 +272,10 @@ void checkSheepStatus(Sheep *sheeps, int n, Player *player, int limit, int m){
     float dis;
     for(int i = 0; i < n; i++){
         /*
-            status = 0: 隨機走動mode
+            status = 0: 隨機走動mode(dubug 中暫時讓羊不動)
                    = 1: 驚嚇Mode
                    = 2: 抵達終點
+                   = 3: 在路徑中受到驚嚇
         */
        if(sheeps[i].getPos().first == limit && sheeps[i].getPos().second == limit){
             // cout << "set sheep " << i << "'s status to 2\n";  
@@ -241,21 +284,33 @@ void checkSheepStatus(Sheep *sheeps, int n, Player *player, int limit, int m){
             dis = INT_MAX;
             // find 
             sheeps[i].playerReset();
-            for(int j = 0; j < m; j++){
-                dis = distanceObj(sheeps[i].getPos(), player[j].pos);
 
-                // cout << i << " "  << j << ": " << dis << endl;
-                if(dis <= 1.5){
-                    // cout << "because player " << j << ", set sheep " << i << "'s status to 1\n";
-                    sheeps[i].setStatus(1);
-                    // sheeps[i].calV0(player);  <- 要等到scan完所有無人機才能算(搬到sheepMover)
-                    sheeps[i].addPlayer(j);
+            for(int j = 0; j < m; j++){
+            // 先判斷無人機在經過的路徑上有沒有影響
+                Point p(sheeps[i].getPos().first, sheeps[i].getPos().second);
+                if(distancePtoL(p, player[j].path) != -1 && distancePtoL(p, player[j].path) < 1.5){
+                    // cout << "sheep " << i << " and player " << j << "'s distance : " <<  distancePtoL(p, player[j].path) << endl;
+                    sheeps[i].setStatus(3);
+                    sheeps[i].addPlayerP(j);
                 }else{
-                    if (!(sheeps[i].getSta() == 1)){
-                        // cout << "because player " << j << ", set sheep " << i << "'s status to 0\n";
-                        sheeps[i].setStatus(0);
+                    dis = distanceObj(sheeps[i].getPos(), player[j].pos);
+
+                    // cout << i << " "  << j << ": " << dis << endl;
+                    if(dis <= 1.5){
+                        // cout << "because player " << j << ", set sheep " << i << "'s status to 1\n";
+                        if(sheeps[i].getSta() != 3){
+                            // 優先處理 case3(先發生)
+                            sheeps[i].setStatus(1);
+                            // sheeps[i].calV0(player);  <- 要等到scan完所有無人機才能算(搬到sheepMover)
+                            sheeps[i].addPlayer(j);
+                        }
                     }else{
-                        // 原本還在逃跑:繼續直到v = 0
+                        if (!(sheeps[i].getSta() == 1 || sheeps[i].getSta() == 3)){
+                            // cout << "because player " << j << ", set sheep " << i << "'s status to 0\n";
+                            sheeps[i].setStatus(0);
+                        }else{
+                            // 原本還在逃跑:繼續直到v = 0
+                        }
                     }
                 }
             }
@@ -346,27 +401,43 @@ void sheepGather(Sheep *sheeps, int far_sheep, pair<float, float> lcm, int limit
 }
 
 void method3(Player *player, Sheep *sheeps, pair <float, float> target, int n, int limit, int m){
-    // 不可選擇的羊隻
+    // 不可選擇的羊隻(更改指定無人機方法)
     vector <int> n_ava;
-    int index;
+    int index[m];
+    int curr_index;
     float dir_x, dir_y;
     for(int j = 0; j < m; j++){
-        index = findFarest(sheeps, target, n, n_ava);
+        index[j] = findFarest(sheeps, target, n, n_ava);
         // cout << index << endl;
-        n_ava.push_back(index);
+        n_ava.push_back(index[j]);
 
-        if(sheeps[index].getPos().first - target.first == 0){
+    }
+    // 決定指派給哪台無人機
+    for(int i = 0; i < m; i++){
+        for(int j = i+1; j < m; j++){
+            if(distanceObj(sheeps[index[i]].getPos(), player[j].pos)+distanceObj(sheeps[index[j]].getPos(), player[i].pos) <
+            distanceObj(sheeps[index[i]].getPos(), player[i].pos)+distanceObj(sheeps[index[j]].getPos(), player[j].pos)){
+                // swap
+                curr_index = index[i];
+                index[i] = index[j];
+                index[j] = curr_index;
+            }
+        }        
+    }
+    for(int j = 0; j < m; j++){
+        // 決定去哪個位置
+        if(sheeps[index[j]].getPos().first - target.first == 0){
             dir_x = 0;
         }else{
-            dir_x = (sheeps[index].getPos().first - target.first)/abs((sheeps[index].getPos().first - target.first));
+            dir_x = (sheeps[index[j]].getPos().first - target.first)/abs((sheeps[index[j]].getPos().first - target.first));
         }
-        if(sheeps[index].getPos().second - target.second == 0){
+        if(sheeps[index[j]].getPos().second - target.second == 0){
             dir_y = 0;
         }else{
-            dir_y = (sheeps[index].getPos().second - target.second)/abs((sheeps[index].getPos().second - target.second));
+            dir_y = (sheeps[index[j]].getPos().second - target.second)/abs((sheeps[index[j]].getPos().second - target.second));
         }
 
-        pair <float, float> tarPos(sheeps[index].getPos().first + dir_x, sheeps[index].getPos().second + dir_y);
+        pair <float, float> tarPos(sheeps[index[j]].getPos().first + dir_x, sheeps[index[j]].getPos().second + dir_y);
         pair <float, float> dir(tarPos.first - player[j].pos.first, tarPos.second - player[j].pos.second);
         // cout << dir_x << " " << dir_y << endl;
         if(dir.first != 0 && dir.second != 0){
@@ -389,6 +460,7 @@ void method3(Player *player, Sheep *sheeps, pair <float, float> target, int n, i
         }
         // cout << dir.first << " " << dir.second << endl;
         player[j].currV = pair <float, float>(dir.first, dir.second);
+        player[j].path.p1 = Point(player[j].pos.first, player[j].pos.second);
     }
 }
 
@@ -441,22 +513,36 @@ void method2(Sheep* sheeps, Player *player, int n, int m, pair<float, float> gcm
                 if(abs(v_y) > 3){
                     v_y /= abs(v_y)/3;
                 }
-                player[j].currV = pair <float, float>(v_x, v_y);
+                // player[j].currV = pair <float, float>(v_x, v_y);
             }else{
                 if(v_x == 0 && v_y == 0){
-                    player[j].currV = pair <float, float>(0, 0);
+                    // player[j].currV = pair <float, float>(0, 0);
                 }else if(v_x == 0){
                     if(v_y > 3){
                         v_y /= abs(v_y) / 3;
                     }
-                    player[j].currV = pair <float, float>(0, v_y);
+                    v_x = 0;
+                    // player[j].currV = pair <float, float>(0, v_y);
                 }else{
                     if(v_x >3){
                         v_x /= abs(v_x) / 3;
                     }
-                    player[j].currV = pair <float, float>(v_x, 0);
+                    v_y = 0;
+                    // player[j].currV = pair <float, float>(v_x, 0);
                 }
+
             }
+            // 圓弧形跑法（增加垂直向量）
+            Point orig(v_x, v_y);
+            Point verti = rotate(orig, Point(0, 0), 90);
+            // cout << orig.real() << " " <<  orig.imag() << endl;
+            // cout << verti.real() << " " <<  verti.imag() << endl;
+            verti.real(verti.real() / 10);
+            verti.imag(verti.imag() / 10);
+            Point res = orig + verti;
+            // player[j].currV = pair <float, float>(v_x, v_y);
+            player[j].currV = pair <float, float>(res.real(), res.imag());
+            player[j].path.p1 = Point(player[j].pos.first, player[j].pos.second);
         }
     }
 }
@@ -476,34 +562,39 @@ void printStatus(Sheep *sheeps,int n, int time, Player *player, int m){
 void playerMover(Player *player, int limit, int m){
     for(int i = 0; i < m; i++){
         // cout << player[i].currV.first << ", " << player[i].currV.second << endl;
-        if(player[i].pos.first + player[i].currV.first > limit || player[i].pos.first + player[i].currV.first < 0){
-            if(player[i].pos.first + player[i].currV.first > limit){
-                player[i].pos.first = limit;
-            }else{
-                player[i].pos.first = 0;
-            }
-        }else{
-            // move
-            player[i].pos.first += player[i].currV.first;
-        }
-        if(player[i].pos.second + player[i].currV.second > limit || player[i].pos.second + player[i].currV.second < 0){
-            if(player[i].pos.second + player[i].currV.second > limit){
-                player[i].pos.second = limit;
-            }else{
-                player[i].pos.second = 0;
-            }
-        }else{
-            // move
-            player[i].pos.second += player[i].currV.second;
-        }
+        // if(player[i].pos.first + player[i].currV.first > limit || player[i].pos.first + player[i].currV.first < 0){
+        //     if(player[i].pos.first + player[i].currV.first > limit){
+        //         player[i].pos.first = limit;
+        //     }else{
+        //         player[i].pos.first = 0;
+        //     }
+        // }else{
+        //     // move
+        //     player[i].pos.first += player[i].currV.first;
+        // }
+        // if(player[i].pos.second + player[i].currV.second > limit || player[i].pos.second + player[i].currV.second < 0){
+        //     if(player[i].pos.second + player[i].currV.second > limit){
+        //         player[i].pos.second = limit;
+        //     }else{
+        //         player[i].pos.second = 0;
+        //     }
+        // }else{
+        //     // move
+        //     player[i].pos.second += player[i].currV.second;
+        // }
+        // 無人機無視範圍限制
+        player[i].pos.first += player[i].currV.first;
+        player[i].pos.second += player[i].currV.second;
+        player[i].path.p2 = Point(player[i].pos.first, player[i].pos.second);
     }
 }
 
 void sheepMover(Sheep* sheeps, Player *player, int n, int limit){
     for(int i = 0; i < n; i++){
+        // cout << "sheep " << i << ", status: " << sheeps[i].getSta() << endl;
         switch(sheeps[i].getSta()){
             case 0: 
-                sheeps[i].randMove(limit);
+                // sheeps[i].randMove(limit);
                 break;
             case 1: 
                 if(!(abs(sheeps[i].getV().first) > 0 || abs(sheeps[i].getV().second) > 0)){
@@ -513,6 +604,11 @@ void sheepMover(Sheep* sheeps, Player *player, int n, int limit){
                 break;
             case 2: 
                 break;
+            case 3: 
+                sheeps[i].calV0(player, 1);
+                sheeps[i].runMode(limit);
+                break;
+
         }
     }
 }
@@ -527,13 +623,13 @@ int main(int argc, char *argv[]){
         for(int n = max_n; n <= max_n; n++){
             // for(int rnd = 0; rnd < 5; rnd++){
 
-    srand(time(NULL));
+    // srand(time(NULL));
             // cout << "limit : " << limit << ", n : " << n << endl;
 
     Sheep *sheeps = new Sheep[n];
     pair <float, float> list[n];
     // 分成聚集(0)、分散兩種(1)
-    int randTyp = 2;
+    int randTyp = 0;
     generateRandSheep(sheeps, n, limit, list, randTyp);
     int time = 0;
     int far_sheep = -1;
@@ -546,12 +642,17 @@ int main(int argc, char *argv[]){
     player = new Player[m];
     for(int i = 0; i < m; i++){
         player[i].pos = pair<float, float>(0, 0);
+        player[i].path.p1 = Point(0,0);
+        player[i].path.p2 = Point(0,0);
     }
     pair <float, float> target(limit, limit);
 
-    float c1 = atof(argv[3]);
-    float c2 = atof(argv[4]);
-    float c3 = atof(argv[5]);
+    // float c1 = atof(argv[3]);
+    // float c2 = atof(argv[4]);
+    // float c3 = atof(argv[5]);
+    float c1 = 1.33;
+    float c2 = 0.03;
+    float c3 = 0.9;
     int min = 999999;
     float best_c1 = -1; 
     float best_c2 = -1; 
@@ -577,29 +678,33 @@ int main(int argc, char *argv[]){
         // player.currV = pair <float, float>(0,0);
         // printStatus(sheeps, n, time, player, m);
     while(!gameover){
-        // 確認羊群狀態
-        checkSheepStatus(sheeps, n, player, limit, m);
         // printStatus(sheeps, n, time, player, m);
 
         gcm = calculateGCM(sheeps, n);
         far_sheep = findFarest(sheeps, gcm, n);
         lcm = calculateLCM(sheeps, far_sheep, n);
-        // cout << "gcm: (" << gcm.first << ", " << gcm.second << ")" << endl;
-        // cout << "lcm: (" << lcm.first << ", " << lcm.second << ")" << endl;
         // player movement
         method2(sheeps, player, n, m, gcm, lcm, target, limit, c1, c2, c3);
-
+        // cout << "player moving..." << endl;
         // method3(player, sheeps, target, n, limit, m);
-        
-        // 羊群聚集
-        sheepGather(sheeps, far_sheep, lcm, limit);
-        sheepMover(sheeps, player, n, limit);
         playerMover(player,limit, m);
+
+
+        
+        // cout << "checking sheep status..." << endl;
+        // 確認羊群狀態(配合player path)
+        checkSheepStatus(sheeps, n, player, limit, m);
+        // 羊群聚集
+        // sheepGather(sheeps, far_sheep, lcm, limit);
+        // cout << "sheep moving..." << endl;
+        sheepMover(sheeps, player, n, limit);
+
+
         // check Game status (是否所有羊隻都抵達終點)
         gameover = checkStatus(sheeps, n);
         // cout << gameover << endl;
         time += 1;
-        if(time > 20000){
+        if(time > 50000){
             overloaded = true;
             gameover = true;
         }
@@ -624,6 +729,7 @@ int main(int argc, char *argv[]){
             // }
             }
     }
+
 }
 
 
