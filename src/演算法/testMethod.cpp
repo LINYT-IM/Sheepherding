@@ -186,6 +186,7 @@ int main(int argc, char *argv[]){
     // dis[0] = 4;
     // dis[1] = 6;
     // dis[2] = 8;
+    
     pair <int,int> nodeList[n];
     for (int j = 0; j < samples_n; j++){
         for(int i = 0; i < n; i++){
