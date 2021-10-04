@@ -95,7 +95,7 @@ void generateRandSheep(Sheep *sheeps, int n, int limit, pair <float, float> *lis
 }
 
 
-void checkSheepStatus(Sheep *sheeps, int n, Player *player, int limit, int m){
+void checkSheepStatus(Sheep *sheeps, int n, Player *player, int limit, int m, pair<float, float> target){
     float dis;
     for(int i = 0; i < n; i++){
         /*
@@ -103,7 +103,8 @@ void checkSheepStatus(Sheep *sheeps, int n, Player *player, int limit, int m){
                    = 1: 驚嚇Mode
                    = 2: 抵達終點
         */
-       if(sheeps[i].getPos().first == limit && sheeps[i].getPos().second == limit){
+    //    if(sheeps[i].getPos().first ==  target.first && sheeps[i].getPos().second == target.second){
+       if(distanceObj(sheeps[i].getPos(), target) <= 2){
             // cout << "set sheep " << i << "'s status to 2\n";  
             sheeps[i].setStatus(2);
        }else{
@@ -327,20 +328,30 @@ int main(int argc, char *argv[]){
     pair <float, float> list[n];
     // 分成聚集(0)、分散兩種(1)
     int randTyp = 0;
-    generateRandSheep(sheeps, n, limit, list, randTyp);
+    // generateRandSheep(sheeps, n, limit, list, randTyp);
+    list[0] = pair<float, float>(31,9);
+    list[1] = pair<float, float>(10,40);
+    list[2] = pair<float, float>(5,32);
+    list[3] = pair<float, float>(11,50);
+    list[4] = pair<float, float>(5,2);
+    sheeps[0].setData(31,9,0);
+    sheeps[1].setData(10,40,0);
+    sheeps[2].setData(5,32,0);
+    sheeps[3].setData(11,50,0);
+    sheeps[4].setData(5,2,0);
     int time = 0;
     int far_sheep = -1;
     bool gameover = false;
     pair <float, float> gcm(0, 0);
     pair <float, float> lcm(0, 0);
     // m:無人機個數
-    int m = 4;
+    int m = 1;
     Player *player;
     player = new Player[m];
     for(int i = 0; i < m; i++){
         player[i].pos = pair<float, float>(0, 0);
     }
-    pair <float, float> target(limit, limit);
+    pair <float, float> target(14, 18);
 
     // float c1 = atof(argv[3]);
     // float c2 = atof(argv[4]);
@@ -353,8 +364,8 @@ int main(int argc, char *argv[]){
     float best_c2 = -1; 
     float best_c3 = -1; 
     bool overloaded;
-    // printStatus(sheeps, n, time, player.pos);
-
+    printStatus(sheeps, n, time, player, m);
+    cout << "target: (" << target.first << ", " << target.second << ")\n";
     // Game
     // while(c1 <= 1){
     //     c2 = 0.01;
@@ -375,9 +386,9 @@ int main(int argc, char *argv[]){
     while(!gameover){
         // printStatus(sheeps, n, time, player, m);
 
-        gcm = calculateGCM(sheeps, n);
-        far_sheep = findFarest(sheeps, gcm, n);
-        lcm = calculateLCM(sheeps, far_sheep, n);
+        // gcm = calculateGCM(sheeps, n);
+        // far_sheep = findFarest(sheeps, gcm, n);
+        // lcm = calculateLCM(sheeps, far_sheep, n);
         // player movement
         // method2(sheeps, player, n, m, gcm, lcm, target, limit, c1, c2, c3);
 
@@ -387,9 +398,9 @@ int main(int argc, char *argv[]){
 
         
         // 確認羊群狀態(配合player path)
-        checkSheepStatus(sheeps, n, player, limit, m);
+        checkSheepStatus(sheeps, n, player, limit, m, target);
         // 羊群聚集
-        sheepGather(sheeps, far_sheep, lcm, limit);
+        // sheepGather(sheeps, far_sheep, lcm, limit);
         sheepMover(sheeps, player, n, limit);
 
 
@@ -407,7 +418,7 @@ int main(int argc, char *argv[]){
     //     best_c1 = c1;
     //     best_c2 = c2;
     //     best_c3 = c3;
-    //     // printStatus(sheeps, n, time - 1, player.pos);
+    printStatus(sheeps, n, time, player, m);
     //     // cout << c1 << " " << c2 << " " << c3 << endl;
     // }
     // c3+= 0.01;
